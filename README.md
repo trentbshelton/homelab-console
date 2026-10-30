@@ -5,34 +5,33 @@ computer hooked up to an old CRT. It's a fail-safe: if I'm away and can't
 reach anything, someone at home can read the screen to me over the phone
 and press a key to reboot a server.
 
-```
- HOMELAB CONSOLE
+![Main menu](docs/screenshots/menu.png)
 
- Internet: OK    UPS: 100% on power ~57 min                   Updated 8:33 PM
+Starting up, it checks everything one line at a time, like a server's boot
+screen:
 
- pve            UP         T320 NAS       UP         docker VM      UP
- Game VM        UP         homelab        UP
+![Boot checks](docs/screenshots/boot.gif)
 
- ----------------------------------------------------------------------------
+When something is wrong, it says so in plain words:
 
-   1)  Status details                    5)  Power on a server
-   2)  Internet check                    6)  Reboot a server (soft)
-   3)  IP list                           7)  Force power cycle (hard)
-   4)  Restart a service                 8)  Shut down everything
+![Main menu with a machine down](docs/screenshots/menu-problem.png)
 
- Press a number.   R = refresh now   Q = exit
-```
+![Status details with a failure](docs/screenshots/status-problem.png)
 
-Checks print like a server's boot screen, one line at a time:
+![Internet check when the internet is down](docs/screenshots/internet-down.png)
 
-```
- Checking iDRAC answers ...........................OK    on
- Sending power cycle ..............................OK
- Waiting for T320 NAS to come back ............. / 2:15
-```
+Anything that changes something asks first, then shows each step live and
+ends with `DONE. Tell Trent: OK` or `FAILED. Tell Trent: code 7-3` (menu
+number, then the step that failed):
 
-Every action ends with `DONE. Tell Trent: OK` or
-`FAILED. Tell Trent: code 7-3` (menu number, then the step that failed).
+![Picking a server](docs/screenshots/power-cycle-pick.png)
+
+![Confirming](docs/screenshots/power-cycle-confirm.png)
+
+![Power cycle running](docs/screenshots/power-cycle.gif)
+
+Screenshots come from demo mode with the example config, so the addresses
+are made up. `tools/screenshots.py` regenerates them.
 
 ## Design
 

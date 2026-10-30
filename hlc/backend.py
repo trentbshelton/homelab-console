@@ -5,6 +5,7 @@ would change. Demo fakes everything, so the menu can be tried anywhere.
 """
 
 import json
+import os
 import random
 import socket
 import ssl
@@ -178,7 +179,8 @@ class Demo(Backend):
     def __init__(self, cfg):
         self.ipmi_hosts = {m.ipmi.host: m.host for m in cfg.machines if m.ipmi}
         self.down_until = {}   # host -> time it answers again
-        self.off = set()       # hosts that are powered off
+        # Hosts that start out down, e.g. HLC_DEMO_OFF="1.1.1.1 8.8.8.8"
+        self.off = set(os.environ.get("HLC_DEMO_OFF", "").split())
 
     def _wait(self):
         time.sleep(random.uniform(0.3, 1.2))
