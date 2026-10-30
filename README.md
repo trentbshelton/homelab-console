@@ -30,9 +30,6 @@ number, then the step that failed):
 
 ![Power cycle running](docs/screenshots/power-cycle.gif)
 
-Screenshots come from demo mode with the example config, so the addresses
-are made up. `tools/screenshots.py` regenerates them.
-
 ## Design
 
 - Works when the rest of the lab doesn't. It talks to machines by LAN IP,
