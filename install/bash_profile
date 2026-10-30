@@ -1,0 +1,8 @@
+# ~console/.bash_profile
+# On tty1, start the menu. If it crashes, start it again.
+# Exiting with the PIN (exit code 0) drops to a normal shell.
+if [ "$(tty)" = "/dev/tty1" ]; then
+    until python3 /opt/homelab-console/console.py; do
+        sleep 2
+    done
+fi

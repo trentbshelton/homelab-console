@@ -1,0 +1,6 @@
+config.toml
+__pycache__/
+*.pem
+*.crt
+*key*
+!config.example.toml

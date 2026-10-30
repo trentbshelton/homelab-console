@@ -1,0 +1,76 @@
+# Copy to config.toml and edit. config.toml is gitignored.
+# Use LAN addresses. The point of this box is to work when Tailscale,
+# DNS or the reverse proxy are the thing that's broken.
+
+[console]
+title = "HOMELAB CONSOLE"
+pin = "1234"          # needed to exit the menu to a shell; "" = no PIN
+blank_after = 300     # seconds idle before the screen goes black (CRT burn-in)
+refresh = 60          # seconds between header refreshes
+
+[internet]
+router = "192.168.1.1"
+targets = ["1.1.1.1", "8.8.8.8"]
+dns_name = "github.com"
+
+[ups]
+name = "myups@192.168.1.10"   # NUT ups name @ host running upsd
+
+# One [[machine]] per box. Optional parts:
+#   ipmi            power on / hard power cycle through the iDRAC/BMC
+#   ssh             soft reboot and shutdown ("systemctl reboot/poweroff")
+#   truenas_key_file  pool health + reboot/shutdown through the TrueNAS API
+#   truenas_cert_file TrueNAS's own HTTPS cert, so the API key is only sent
+#                     to the real NAS (download it from Credentials > Certificates)
+#   shutdown_order  position in "shut down everything" (lower goes first)
+#   boot_minutes    how long to wait for it to answer again after a reboot
+
+[[machine]]
+key = "pve"
+name = "Proxmox"
+host = "192.168.1.10"
+ipmi = { host = "192.168.1.11", user = "console", password_file = "/etc/homelab-console/pve-ipmi" }
+ssh = "console@192.168.1.10"
+shutdown_order = 2
+boot_minutes = 12
+note = "Dell R620"
+
+[[machine]]
+key = "nas"
+name = "NAS"
+host = "192.168.1.20"
+ipmi = { host = "192.168.1.21", user = "console", password_file = "/etc/homelab-console/nas-ipmi" }
+truenas_key_file = "/etc/homelab-console/truenas-key"
+truenas_cert_file = "/etc/homelab-console/truenas.crt"
+shutdown_order = 3
+boot_minutes = 8
+note = "TrueNAS SCALE"
+
+[[machine]]
+key = "docker"
+name = "Docker VM"
+host = "192.168.1.30"
+ssh = "console@192.168.1.30"
+shutdown_order = 1
+boot_minutes = 4
+note = "VM on Proxmox"
+
+# Apps to check in Status details. Any answer under 500 counts as up.
+[[service]]
+name = "Proxmox web UI"
+url = "https://192.168.1.10:8006"
+
+[[service]]
+name = "Dashboard"
+url = "http://192.168.1.30:8080"
+
+# Things option 4 can restart. Runs over the machine's ssh login.
+[[restart]]
+name = "Docker containers"
+machine = "docker"
+command = "sudo systemctl restart docker"
+
+[[restart]]
+name = "Tailscale (Docker VM)"
+machine = "docker"
+command = "sudo systemctl restart tailscaled"
