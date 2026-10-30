@@ -24,6 +24,11 @@ name = "myups@192.168.1.10"   # NUT ups name @ host running upsd
 #                     to the real NAS (download it from Credentials > Certificates)
 #   shutdown_order  position in "shut down everything" (lower goes first)
 #   boot_minutes    how long to wait for it to answer again after a reboot
+#   update          include it in option 9 (Updates). Machines with ssh get
+#                   apt updates; TrueNAS only shows what's available, since
+#                   its updates go through its own web UI. Lower order goes
+#                   first (VMs before the host they run on). containers =
+#                   a folder of compose projects to pull and restart too.
 
 [[machine]]
 key = "pve"
@@ -34,6 +39,7 @@ ssh = "console@192.168.1.10"
 shutdown_order = 2
 boot_minutes = 12
 note = "Dell R620"
+update = { order = 3, reboot_warning = "the VMs on it go down too" }
 
 [[machine]]
 key = "nas"
@@ -45,6 +51,7 @@ truenas_cert_file = "/etc/homelab-console/truenas.crt"
 shutdown_order = 3
 boot_minutes = 8
 note = "TrueNAS SCALE"
+update = { order = 2 }
 
 [[machine]]
 key = "docker"
@@ -54,6 +61,7 @@ ssh = "console@192.168.1.30"
 shutdown_order = 1
 boot_minutes = 4
 note = "VM on Proxmox"
+update = { order = 1, containers = "/opt/services", skip = ["vpn"] }
 
 # Apps to check in Status details. Any answer under 500 counts as up.
 [[service]]

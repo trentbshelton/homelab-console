@@ -1,0 +1,11 @@
+# Weekly "updates are waiting" reminder. Only sends when something needs doing.
+# Needs a working `notify "Title" "Message"` command (Pushover in my lab).
+[Unit]
+Description=homelab-console update report
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=console
+ExecStart=/bin/sh -c 'out=$(python3 /opt/homelab-console/console.py --update-report); rc=$?; [ $rc -eq 0 ] || notify "Lab updates waiting" "$out"'

@@ -146,6 +146,13 @@ def main():
         record_gif("power-cycle.gif", 40, until="Tell Trent", hold=4)
         keys("x")
 
+        keys("9", wait=8)
+        save_png("updates.png")
+        keys("i", "1", "2", "3", "4", "Enter", wait=0.3)
+        keys("y", wait=0.1)
+        record_gif("updates-install.gif", 40, until="Y = reboot", hold=5)
+        keys("x")
+
         # Something broken: the Docker VM is down, and later the internet.
         start(off="192.168.1.30")
         time.sleep(25)

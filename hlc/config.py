@@ -12,6 +12,14 @@ class Ipmi:
 
 
 @dataclass
+class Update:
+    order: int = 10                     # lower updates (and reboots) first
+    containers: str | None = None       # folder of compose projects to update too
+    skip: list[str] = field(default_factory=list)  # compose projects to leave alone
+    reboot_warning: str = ""            # shown before rebooting it for updates
+
+
+@dataclass
 class Machine:
     key: str
     name: str
@@ -23,6 +31,7 @@ class Machine:
     shutdown_order: int | None = None   # lower shuts down first; None = skip
     boot_minutes: int = 10              # how long to wait for it to come back
     note: str = ""
+    update: Update | None = None        # include in the Updates screen
 
 
 @dataclass
@@ -94,6 +103,7 @@ def load(path):
             shutdown_order=m.get("shutdown_order"),
             boot_minutes=int(m.get("boot_minutes", 10)),
             note=m.get("note", ""),
+            update=_update(m),
         ))
 
     keys = [m.key for m in cfg.machines]
@@ -117,6 +127,20 @@ def load(path):
         cfg.restarts.append(restart)
 
     return cfg
+
+
+def _update(m):
+    u = m.get("update")
+    if u is None:
+        return None
+    if not (m.get("ssh") or m.get("truenas_key_file")):
+        raise ConfigError(f"machine '{m.get('key')}' has update set but no ssh or truenas_key_file")
+    return Update(
+        order=int(u.get("order", 10)),
+        containers=u.get("containers"),
+        skip=list(u.get("skip", [])),
+        reboot_warning=u.get("reboot_warning", ""),
+    )
 
 
 def _need(table, key, kind):

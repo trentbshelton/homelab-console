@@ -16,6 +16,7 @@ MENU = [
     ("6", "Reboot a server (soft)"),
     ("7", "Force power cycle (hard)"),
     ("8", "Shut down everything"),
+    ("9", "Updates"),
 ]
 
 DOT_COL = 50     # where the dots stop and the status word starts
@@ -182,12 +183,12 @@ class App:
             self.footer(foot)
         self.scr.refresh()
 
-    def wait_any_key(self, title, lines, verdict=None):
-        self.draw_steps(title, lines, None, verdict, "Press any key to go back")
-        while self.getkey() is None:
-            if self.blank:
-                continue
-        return
+    def wait_any_key(self, title, lines, verdict=None, foot="Press any key to go back"):
+        self.draw_steps(title, lines, None, verdict, foot)
+        while (k := self.getkey()) is None:
+            if not self.blank:
+                self.draw_steps(title, lines, None, verdict, foot)
+        return k
 
     # --- screens ---
 
@@ -227,10 +228,12 @@ class App:
                                     flows.hard_cycle_steps, 7, warn=True)
             elif ch == "8":
                 self.shutdown_all()
+            elif ch == "9":
+                self.updates()
             elif ch == "r":
                 self.summary.wake.set()
             elif ch == "q":
-                if self.ask_pin():
+                if self.ask_pin("Enter PIN to exit to the shell (Esc cancels):"):
                     return
 
     def draw_main(self):
@@ -373,17 +376,66 @@ class App:
             return
         self.act("SHUT DOWN EVERYTHING", steps, 8)
 
+    def updates(self):
+        title = "UPDATES"
+        steps = flows.update_check_steps(self.cfg, self.b)
+        if not steps:
+            self.message(title, WARN, "No machines have update set in the config.")
+            return
+        results, lines = self.run_steps(title, steps)
+        mine = {m.name for m in flows.installable(self.cfg)}
+        waiting = [r for r, m in zip(results, flows.updatable(self.cfg))
+                   if m.name in mine and r.status == WARN]
+        bad = sum(r.status == FAIL for r in results)
+        if bad:
+            verdict = (FAIL, f"Couldn't check {bad} machine(s). Tell Trent which lines say FAIL.")
+        elif waiting:
+            verdict = (WARN, "Updates are waiting. Trent: press I to install them.")
+        else:
+            verdict = (OK, "Everything is up to date.")
+        k = self.wait_any_key(title, lines, verdict,
+                              "I = install updates (PIN)   Any other key = go back")
+        if k not in (ord("i"), ord("I")) or not mine:
+            return
+        if not self.ask_pin("Enter PIN to install updates (Esc cancels):"):
+            return
+        order = ", ".join(m.name for m in flows.installable(self.cfg))
+        if not self.confirm(title, f"Install updates on: {order}?"):
+            return
+
+        needs = []
+        results, lines = self.run_steps("INSTALLING UPDATES",
+                                        flows.update_install_steps(self.cfg, self.b, needs))
+        failed = [i for i, r in enumerate(results, 1) if r.status == FAIL]
+        if failed:
+            verdict = (FAIL, f"FAILED. Tell Trent: code 9-{failed[0]}")
+        else:
+            verdict = (OK, "DONE. Tell Trent: OK")
+        self.summary.wake.set()
+        if not needs:
+            self.wait_any_key("INSTALLING UPDATES", lines, verdict)
+            return
+
+        names = ", ".join(m.name for m in sorted(needs, key=lambda m: m.update.order))
+        notes = [(f"! {m.name}: {m.update.reboot_warning}", None, None)
+                 for m in needs if m.update.reboot_warning]
+        k = self.wait_any_key("INSTALLING UPDATES", lines + notes,
+                              (verdict[0], f"{verdict[1]}  Reboot needed: {names}"),
+                              "Y = reboot them now, in that order   Any other key = later")
+        if k in (ord("y"), ord("Y")):
+            self.act("REBOOTING AFTER UPDATES", flows.update_reboot_steps(needs, self.b), 9)
+
     def message(self, title, status, text):
         self.wait_any_key(title, [], (status, text))
 
-    def ask_pin(self):
+    def ask_pin(self, prompt):
         if not self.cfg.pin:
             return True
         entered = ""
         while True:
             self.scr.erase()
-            self.title_bar("EXIT")
-            self.put(2, 1, "Enter PIN to exit to the shell (Esc cancels):")
+            self.title_bar("PIN")
+            self.put(2, 1, prompt)
             self.put(4, 3, "*" * len(entered))
             self.scr.refresh()
             k = self.getkey()

@@ -105,6 +105,15 @@ class Backend:
         text = f"{charge}% {'on power' if 'OL' in status else 'ON BATTERY'} ~{mins} min"
         return Result(OK if "OL" in status else WARN, text)
 
+    def ssh_read(self, target, command, timeout=120):
+        """Runs even in dry run, so only use it for commands that change nothing."""
+        ok, out = _run(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5",
+                        target, command], timeout)
+        return Result(OK if ok else FAIL, out)
+
+    def truenas_get(self, host, key_file, cert_file, path):
+        return self._truenas(host, key_file, cert_file, "GET", path)
+
     def truenas_pools(self, host, key_file, cert_file=None):
         try:
             pools = self._truenas(host, key_file, cert_file, "GET", "/pool")
@@ -122,9 +131,9 @@ class Backend:
         """action: on, cycle, soft (ACPI shutdown, like a short press)."""
         return self._change(self._ipmi(ipmi, action))
 
-    def ssh(self, target, command):
+    def ssh(self, target, command, timeout=60):
         return self._change(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5",
-                             target, command], timeout=60)
+                             target, command], timeout=timeout)
 
     def truenas_call(self, host, key_file, cert_file, path, body):
         if self.dry_run:
@@ -181,6 +190,8 @@ class Demo(Backend):
         self.down_until = {}   # host -> time it answers again
         # Hosts that start out down, e.g. HLC_DEMO_OFF="1.1.1.1 8.8.8.8"
         self.off = set(os.environ.get("HLC_DEMO_OFF", "").split())
+        self.updated = set()   # hosts that ran updates
+        self.kernel = set()    # hosts whose updates include a new kernel
 
     def _wait(self):
         time.sleep(random.uniform(0.3, 1.2))
@@ -225,13 +236,35 @@ class Demo(Backend):
             self.down_until[host] = time.time() + 6
         return Result(OK)
 
-    def ssh(self, target, command):
+    def ssh_read(self, target, command, timeout=120):
+        self._wait()
+        if "PENDING=" not in command:
+            return Result(OK)
+        host = target.split("@")[-1]
+        if host in self.updated:
+            return Result(OK, f"PENDING=0 REBOOT={int(host in self.kernel)} APTFAIL=0 LAST=today")
+        n = sum(map(ord, host)) % 40 + 1    # same answer every time, for screenshots
+        if n > 10:
+            self.kernel.add(host)
+        return Result(OK, f"PENDING={n} REBOOT=0 APTFAIL=0 LAST=2026-10-12")
+
+    def truenas_get(self, host, key_file, cert_file, path):
+        self._wait()
+        return {"code": "NORMAL", "status": {"new_version": None}}
+
+    def ssh(self, target, command, timeout=60):
         self._wait()
         host = target.split("@")[-1]
+        if "dist-upgrade" in command or "compose" in command:
+            self.sleep(3)
+            self.updated.add(host)
+            return Result(OK, "12 upgraded, 1 newly installed, 0 to remove"
+                          if "dist-upgrade" in command else "8 projects updated")
         if "poweroff" in command:
             self.off.add(host)
         elif "reboot" in command:
             self.down_until[host] = time.time() + 8
+            self.kernel.discard(host)
         return Result(OK)
 
     def truenas_call(self, host, key_file, cert_file, path, body):

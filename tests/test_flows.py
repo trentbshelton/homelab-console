@@ -3,7 +3,7 @@ import time
 import unittest
 
 from hlc import config, flows
-from hlc.backend import FAIL, OK, SKIP, Demo, DryRun
+from hlc.backend import FAIL, OK, SKIP, WARN, Demo, DryRun
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 EXAMPLE = os.path.join(HERE, "..", "config.example.toml")
@@ -69,11 +69,84 @@ class FlowTests(unittest.TestCase):
         self.assertEqual(flows.wait_for(b, m.host, True, 1, lambda t: None).status, SKIP)
 
 
+class Patchy(Fast):
+    """Demo lab where every apt machine has 5 updates and one includes a kernel."""
+
+    def ssh_read(self, target, command, timeout=120):
+        host = target.split("@")[-1]
+        if host in self.updated:
+            return flows.Result(OK, f"PENDING=0 REBOOT={int(host == '192.168.1.10')} "
+                                    "APTFAIL=0 LAST=2026-10-30")
+        return flows.Result(OK, "PENDING=5 REBOOT=0 APTFAIL=0 LAST=2026-10-12")
+
+    def sleep(self, seconds):
+        pass
+
+
+class UpdateTests(unittest.TestCase):
+    def setUp(self):
+        self.cfg = config.load(EXAMPLE)
+        self.b = Patchy(self.cfg)
+
+    def test_parse_check(self):
+        v = flows.parse_check("PENDING=12 REBOOT=1 APTFAIL=0 LAST=2026-10-26")
+        self.assertEqual(v, {"PENDING": "12", "REBOOT": "1", "APTFAIL": "0", "LAST": "2026-10-26"})
+
+    def test_check_shows_pending(self):
+        results = run(flows.update_check_steps(self.cfg, self.b))
+        self.assertEqual([r.status for r in results], [WARN, OK, WARN])   # docker, nas, pve
+        self.assertEqual(results[0].detail, "5 updates, last 10-12")
+        self.assertEqual(results[1].detail, "up to date")
+
+    def test_check_flags_unreachable_mirrors(self):
+        self.b.ssh_read = lambda *a, **k: flows.Result(OK, "PENDING=0 REBOOT=0 APTFAIL=1 LAST=x")
+        r = flows.check_updates(self.b, self.cfg.machine("pve"))
+        self.assertEqual(r.status, FAIL)
+
+    def test_install_order_skips_truenas(self):
+        needs = []
+        steps = flows.update_install_steps(self.cfg, self.b, needs)
+        self.assertEqual([s.label for s in steps], [
+            "Docker VM: system packages", "Docker VM: containers",
+            "Proxmox: system packages",
+            "Docker VM: reboot needed?", "Proxmox: reboot needed?"])
+
+    def test_install_reports_what_needs_reboot(self):
+        needs = []
+        results = run(flows.update_install_steps(self.cfg, self.b, needs))
+        self.assertTrue(all(r.ok or r.status == WARN for r in results))
+        self.assertEqual([m.key for m in needs], ["pve"])
+        self.assertEqual(results[0].detail, "12 upgraded, 1 new")
+        reboot = [s.label for s in flows.update_reboot_steps(needs, self.b)]
+        self.assertIn("Waiting for Proxmox to come back", reboot)
+
+    def test_dry_run_installs_nothing(self):
+        needs = []
+        b = DryRun()
+        steps = flows.update_install_steps(self.cfg, b, needs)
+        r = steps[0].run(lambda t: None)
+        self.assertIn("dry run", r.detail)
+        self.assertEqual(steps[-1].run(lambda t: None).status, SKIP)
+        self.assertEqual(needs, [])
+
+    def test_containers_command_skips(self):
+        cmd = flows.containers_command(self.cfg.machine("docker").update)
+        self.assertIn("cd /opt/services", cmd)
+        self.assertIn('case " vpn " in', cmd)
+
+
 class ConfigTests(unittest.TestCase):
     def test_restart_needs_ssh(self, tmp="/tmp/hlc-test.toml"):
         with open(tmp, "w") as f:
             f.write('[[machine]]\nkey="a"\nname="A"\nhost="1.2.3.4"\n'
                     '[[restart]]\nname="x"\nmachine="a"\ncommand="true"\n')
+        with self.assertRaises(config.ConfigError):
+            config.load(tmp)
+        os.remove(tmp)
+
+    def test_update_needs_a_way_in(self, tmp="/tmp/hlc-test2.toml"):
+        with open(tmp, "w") as f:
+            f.write('[[machine]]\nkey="a"\nname="A"\nhost="1.2.3.4"\nupdate={order=1}\n')
         with self.assertRaises(config.ConfigError):
             config.load(tmp)
         os.remove(tmp)
