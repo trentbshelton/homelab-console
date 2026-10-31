@@ -156,7 +156,9 @@ class Backend:
         return Result(OK if ok else FAIL, out)
 
     def _ipmi(self, ipmi, action):
-        return ["ipmitool", "-I", "lanplus", "-H", ipmi.host, "-U", ipmi.user,
+        # Ask for OPERATOR, not ipmitool's default ADMINISTRATOR: it's all that
+        # power control needs, and an operator-only user is refused otherwise.
+        return ["ipmitool", "-I", "lanplus", "-L", "OPERATOR", "-H", ipmi.host, "-U", ipmi.user,
                 "-f", ipmi.password_file, "chassis", "power", action]
 
     def _truenas(self, host, key_file, cert_file, method, path, body=None):
