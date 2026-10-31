@@ -90,7 +90,14 @@ Copy `config.example.toml` to `config.toml` and fill in your machines.
 3. `install/getty-autologin.conf` → `/etc/systemd/system/getty@tty1.service.d/autologin.conf`
 4. `install/bash_profile` → `~console/.bash_profile`
 5. For a CRT that only does 640x480, add `video=640x480@60` to the kernel
-   command line.
+   command line. Through an HDMI to VGA adapter, that may not work: mine
+   reports a fake list of monitor modes with no 640x480 on it. It does list
+   720x480 at 59.94 Hz, which has the same 31.5 kHz line rate as VGA, so an
+   old fixed-frequency CRT still locks on. What worked on an Intel iGPU:
+   `video=HDMI-A-1:720x480@60 i915.fastboot=0` (check the connector name in
+   `/sys/class/drm/`). The text console still thinks it's 1024x768, so
+   `getty-autologin.conf` sets tty1 to 90x30 (720/8 by 480/16) before
+   logging in.
 6. Optional weekly update reminder: copy `install/update-report.service`
    and `.timer` to `/etc/systemd/system/`, then
    `systemctl enable --now update-report.timer`.
